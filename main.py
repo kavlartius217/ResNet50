@@ -1,6 +1,7 @@
 import streamlit as st
 import numpy as np
 import tensorflow as tf
+import os
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
 
@@ -16,35 +17,27 @@ class CustomBatchNormalization(tf.keras.layers.BatchNormalization):
             config['axis'] = config['axis'][0]
         return cls(**config)
 
-    def get_config(self):
-        config = super().get_config()
-        if isinstance(config['axis'], list):
-            config['axis'] = config['axis'][0]
-        return config
-
 @st.cache_resource
 def load_model_with_custom_objects():
     try:
-        # Define custom objects dictionary
+        # Print current working directory and list files for debugging
+        st.write("Current directory contents:", os.listdir())
+            
         custom_objects = {
             'BatchNormalization': CustomBatchNormalization,
         }
         
-        # Load the model with custom objects
         with tf.keras.utils.custom_object_scope(custom_objects):
             model = load_model('model3.h5', compile=False)
-            
-            # Recompile the model
             model.compile(
                 optimizer='adam',
                 loss='categorical_crossentropy',
                 metrics=['accuracy']
             )
-            
         return model
     except Exception as e:
         st.error(f"Error loading model: {str(e)}")
-        return None
+        raise e  # Re-raise to see full traceback
 
 def preprocess_image(uploaded_file):
     try:
@@ -69,7 +62,7 @@ def main():
         with st.spinner("Loading model..."):
             model = load_model_with_custom_objects()
             if model is None:
-                st.error("Model loading failed. Please check if the model file exists and is accessible.")
+                st.error("Model loading failed.")
                 return
             else:
                 st.success("Model loaded successfully!")
@@ -77,7 +70,7 @@ def main():
         st.error(f"Error during model loading: {str(e)}")
         return
 
-    # File uploader
+    # File uploader for images
     uploaded_file = st.file_uploader("Choose an X-ray image file", type=["jpg", "jpeg", "png"])
     
     if uploaded_file is not None:
