@@ -5,16 +5,27 @@ from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
 import os
 
+# Configure TensorFlow to handle legacy BatchNormalization layer loading
+import tensorflow.keras.layers as layers
+try:
+    layers.BatchNormalization._disable_v2_behavior()
+except:
+    pass
+
 # Get the current directory where the script is located
 current_dir = os.path.dirname(os.path.abspath(__file__))
 model_path = os.path.join(current_dir, "model3.h5")
 
+# Custom objects to handle legacy BatchNormalization
+custom_objects = {'BatchNormalization': layers.BatchNormalization}
+
 # Load the pre-trained model with error handling
 try:
-    model = load_model(model_path)
+    model = load_model(model_path, custom_objects=custom_objects)
     st.success("Model loaded successfully!")
 except Exception as e:
-    st.error(f"Error loading model from {model_path}: {str(e)}")
+    st.error(f"Error loading model: {str(e)}")
+    st.write("Please ensure you're using compatible TensorFlow version (try tensorflow==2.12.0)")
     st.stop()
 
 # Define the class labels
