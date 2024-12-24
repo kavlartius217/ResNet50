@@ -3,9 +3,19 @@ import tensorflow
 import numpy as np
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
+import os
 
-# Load the pre-trained model
-model = load_model("/content/model3.h5")
+# Get the current directory where the script is located
+current_dir = os.path.dirname(os.path.abspath(__file__))
+model_path = os.path.join(current_dir, "model3.h5")
+
+# Load the pre-trained model with error handling
+try:
+    model = load_model(model_path)
+    st.success("Model loaded successfully!")
+except Exception as e:
+    st.error(f"Error loading model from {model_path}: {str(e)}")
+    st.stop()
 
 # Define the class labels
 class_labels = ['COVID-19', 'NORMAL', 'VIRAL PNEUMONIA']
@@ -21,20 +31,29 @@ def preprocess_image(img_path):
 def main():
     st.title("Lung Disease Classification")
     st.write("Upload an X-ray image to classify the lung condition.")
-
+    
     # File uploader
     uploaded_file = st.file_uploader("Choose an image file", type=["jpg", "jpeg", "png"])
-
+    
     if uploaded_file is not None:
-        # Preprocess the image
-        img = preprocess_image(uploaded_file)
-
-        # Make predictions
-        predictions = model.predict(img)
-        predicted_class = class_labels[np.argmax(predictions)]
-
-        # Display the result
-        st.write(f"The predicted lung condition is: {predicted_class}")
+        try:
+            # Display the uploaded image
+            st.image(uploaded_file, caption='Uploaded X-ray Image', use_column_width=True)
+            
+            # Preprocess the image
+            img = preprocess_image(uploaded_file)
+            
+            # Make predictions
+            predictions = model.predict(img)
+            predicted_class = class_labels[np.argmax(predictions)]
+            confidence = np.max(predictions) * 100
+            
+            # Display the result
+            st.write(f"Predicted condition: {predicted_class}")
+            st.write(f"Confidence: {confidence:.2f}%")
+            
+        except Exception as e:
+            st.error(f"Error during prediction: {str(e)}")
 
 if __name__ == "__main__":
     main()
