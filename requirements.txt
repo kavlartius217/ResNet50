@@ -1,1 +1,6 @@
-tensorflow
+tensorflow==2.9.1
+keras==2.9.0
+streamlit
+numpy
+pillow
+h5py
