@@ -1,38 +1,53 @@
 import streamlit as st
 import numpy as np
 import tensorflow as tf
-import h5py
 import json
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
 from tensorflow.keras.applications import ResNet50V2
 
+class CustomBatchNormalization(tf.keras.layers.BatchNormalization):
+    def __init__(self, axis=[3], **kwargs):
+        if isinstance(axis, list):
+            axis = axis[0]
+        super().__init__(axis=axis, **kwargs)
+    
+    @classmethod
+    def from_config(cls, config):
+        # Handle axis in config
+        if 'axis' in config and isinstance(config['axis'], list):
+            config['axis'] = config['axis'][0]
+        return cls(**config)
+
+    def get_config(self):
+        config = super().get_config()
+        if isinstance(config['axis'], list):
+            config['axis'] = config['axis'][0]
+        return config
+
 @st.cache_resource
 def load_model_with_custom_objects():
     try:
-        # Set the batch norm layer to accept lists
-        class CustomBatchNormalization(tf.keras.layers.BatchNormalization):
-            def __init__(self, axis=[3], **kwargs):
-                if isinstance(axis, list):
-                    axis = axis[0]
-                super().__init__(axis=axis, **kwargs)
-
-        # Define custom objects
+        # Define custom objects dictionary
         custom_objects = {
             'BatchNormalization': CustomBatchNormalization,
-            'ResNet50V2': ResNet50V2
         }
-
-        # Load model with the custom objects
-        model = load_model('model3.h5', custom_objects=custom_objects, compile=False)
         
-        # Recompile model
-        model.compile(
-            optimizer='adam',
-            loss='categorical_crossentropy',
-            metrics=['accuracy']
-        )
-        
+        # Attempt to load the model with custom objects
+        with tf.keras.utils.custom_object_scope(custom_objects):
+            model = tf.keras.saving.load_model(
+                'model3.h5',
+                compile=False,
+                custom_objects=custom_objects
+            )
+            
+            # Recompile the model
+            model.compile(
+                optimizer=tf.keras.optimizers.legacy.Adam(),  # Using legacy optimizer
+                loss='categorical_crossentropy',
+                metrics=['accuracy']
+            )
+            
         return model
     except Exception as e:
         st.error(f"Error loading model: {str(e)}")
@@ -63,6 +78,8 @@ def main():
             if model is None:
                 st.error("Model loading failed. Please check if the model file exists and is accessible.")
                 return
+            else:
+                st.success("Model loaded successfully!")
     except Exception as e:
         st.error(f"Error during model loading: {str(e)}")
         return
@@ -95,7 +112,6 @@ def main():
                             st.write(f"{label}: {float(prob)*100:.2f}%")
                     except Exception as e:
                         st.error(f"Error during prediction: {str(e)}")
-                        st.error("Full error message: " + str(e))
 
 if __name__ == "__main__":
     main()
