@@ -1,10 +1,8 @@
 import streamlit as st
 import numpy as np
 import tensorflow as tf
-import json
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
-from tensorflow.keras.applications import ResNet50V2
 
 class CustomBatchNormalization(tf.keras.layers.BatchNormalization):
     def __init__(self, axis=[3], **kwargs):
@@ -14,7 +12,6 @@ class CustomBatchNormalization(tf.keras.layers.BatchNormalization):
     
     @classmethod
     def from_config(cls, config):
-        # Handle axis in config
         if 'axis' in config and isinstance(config['axis'], list):
             config['axis'] = config['axis'][0]
         return cls(**config)
@@ -33,17 +30,13 @@ def load_model_with_custom_objects():
             'BatchNormalization': CustomBatchNormalization,
         }
         
-        # Attempt to load the model with custom objects
+        # Load the model with custom objects
         with tf.keras.utils.custom_object_scope(custom_objects):
-            model = tf.keras.saving.load_model(
-                'model3.h5',
-                compile=False,
-                custom_objects=custom_objects
-            )
+            model = load_model('model3.h5', compile=False)
             
             # Recompile the model
             model.compile(
-                optimizer=tf.keras.optimizers.legacy.Adam(),  # Using legacy optimizer
+                optimizer='adam',
                 loss='categorical_crossentropy',
                 metrics=['accuracy']
             )
