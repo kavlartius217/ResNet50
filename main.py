@@ -4,7 +4,7 @@ from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
 
 # Load the pre-trained model
-load_model("model.h5")
+load_model("model3.h5")
 
 # Define the class labels
 class_labels = ['COVID-19', 'NORMAL', 'VIRAL PNEUMONIA']
