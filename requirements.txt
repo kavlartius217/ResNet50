@@ -1,6 +1,3 @@
-tensorflow==2.12.0
+tensorflow
 keras
-streamlit
-numpy
-pillow
-h5py
+
