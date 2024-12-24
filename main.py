@@ -3,77 +3,88 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
+from tensorflow.keras.applications import ResNet50V2
 
-# Create a custom BatchNormalization layer
-class CustomBatchNormalization(tf.keras.layers.BatchNormalization):
-    def __init__(self, axis=-1, momentum=0.99, epsilon=1e-3, **kwargs):
-        if isinstance(axis, list):
-            axis = axis[0]
-        super().__init__(
-            axis=axis,
-            momentum=momentum,
-            epsilon=epsilon,
-            **kwargs
-        )
-    
-    def get_config(self):
-        config = super().get_config()
-        if isinstance(config['axis'], list):
-            config['axis'] = config['axis'][0]
-        return config
+def fix_batch_normalization(layer_config):
+    """Fix BatchNormalization layer configuration"""
+    if layer_config.get('class_name') == 'BatchNormalization':
+        if isinstance(layer_config['config'].get('axis'), list):
+            layer_config['config']['axis'] = layer_config['config']['axis'][0]
+    return layer_config
 
-# Load the pre-trained model with custom objects
 @st.cache_resource
 def load_model_with_custom_objects():
     try:
-        # Set model to inference mode using tf.keras
-        tf.keras.utils.set_random_seed(42)  # For reproducibility
-        
+        # First, load the model in a special way to modify BatchNorm layers
+        with h5py.File('model3.h5', 'r') as f:
+            model_config = f.attrs.get('model_config')
+            if model_config is not None:
+                model_config = json.loads(model_config.decode('utf-8'))
+                # Fix BatchNormalization layers in config
+                if 'layers' in model_config:
+                    for layer in model_config['layers']:
+                        layer = fix_batch_normalization(layer)
+
+        # Define custom objects
         custom_objects = {
-            'BatchNormalization': CustomBatchNormalization,
-            'relu': tf.keras.activations.relu,
-            'softmax': tf.keras.activations.softmax
+            'ResNet50V2': ResNet50V2
         }
+
+        # Load model with modified config
+        model = tf.keras.models.load_model(
+            'model3.h5',
+            custom_objects=custom_objects,
+            compile=False
+        )
         
-        with tf.keras.utils.custom_object_scope(custom_objects):
-            model = load_model("model3.h5", compile=False)
-            model.compile(
-                optimizer='adam',
-                loss='categorical_crossentropy',
-                metrics=['accuracy']
-            )
+        # Recompile model
+        model.compile(
+            optimizer='adam',
+            loss='categorical_crossentropy',
+            metrics=['accuracy']
+        )
+        
         return model
     except Exception as e:
         st.error(f"Error loading model: {str(e)}")
         return None
 
-# Function to preprocess the input image
 def preprocess_image(uploaded_file):
     try:
-        file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-        img = tf.io.decode_image(file_bytes, channels=3)
-        img = tf.image.resize(img, (256, 256))
-        img = tf.cast(img, tf.float32) / 255.0
-        img = tf.expand_dims(img, axis=0)
-        return img
+        img = image.load_img(uploaded_file, target_size=(256, 256))
+        img_array = image.img_to_array(img)
+        img_array = np.expand_dims(img_array, axis=0)
+        img_array = img_array / 255.0
+        return img_array
     except Exception as e:
         st.error(f"Error processing image: {str(e)}")
         return None
 
-# Define the class labels
+# Define class labels
 class_labels = ['COVID-19', 'NORMAL', 'VIRAL PNEUMONIA']
 
-# Streamlit app
 def main():
     st.title("Lung Disease Classification")
     st.write("Upload an X-ray image to classify the lung condition.")
 
-    # Load model
-    with st.spinner("Loading model..."):
-        model = load_model_with_custom_objects()
-    
-    if model is None:
-        st.error("Failed to load the model. Please check the model file and try again.")
+    # Add import statements display
+    with st.expander("Show required imports"):
+        st.code("""
+import tensorflow as tf
+import h5py
+import json
+from tensorflow.keras.applications import ResNet50V2
+        """)
+
+    # Load model with better error handling
+    try:
+        with st.spinner("Loading model..."):
+            model = load_model_with_custom_objects()
+            if model is None:
+                st.error("Model loading failed. Please check if the model file exists and is accessible.")
+                return
+    except Exception as e:
+        st.error(f"Error during model loading: {str(e)}")
         return
 
     # File uploader
@@ -83,32 +94,28 @@ def main():
         # Display the uploaded image
         st.image(uploaded_file, caption="Uploaded X-ray Image", use_column_width=True)
         
-        # Add a prediction button
         if st.button("Analyze Image"):
             with st.spinner("Analyzing..."):
-                # Preprocess the image
-                img_tensor = preprocess_image(uploaded_file)
+                img_array = preprocess_image(uploaded_file)
                 
-                if img_tensor is not None:
+                if img_array is not None:
                     try:
-                        # Make predictions
-                        predictions = model.predict(img_tensor)
+                        predictions = model.predict(img_array, verbose=0)
                         predicted_class = class_labels[np.argmax(predictions)]
                         confidence = float(np.max(predictions)) * 100
 
-                        # Display results
                         st.success("Analysis Complete!")
                         st.write("---")
                         st.write("### Results:")
                         st.write(f"**Predicted Condition:** {predicted_class}")
                         st.write(f"**Confidence:** {confidence:.2f}%")
                         
-                        # Display all probabilities
                         st.write("\n### Detailed Probabilities:")
                         for label, prob in zip(class_labels, predictions[0]):
                             st.write(f"{label}: {float(prob)*100:.2f}%")
                     except Exception as e:
                         st.error(f"Error during prediction: {str(e)}")
+                        st.error("Full error message: " + str(e))
 
 if __name__ == "__main__":
     main()
