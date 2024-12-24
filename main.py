@@ -4,40 +4,52 @@ import tensorflow as tf
 import os
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
+from tensorflow.keras.applications import ResNet50V2
 
 class CustomBatchNormalization(tf.keras.layers.BatchNormalization):
-    def __init__(self, axis=[3], **kwargs):
+    def __init__(self, axis=[3], momentum=0.99, epsilon=1.001e-5, **kwargs):
         if isinstance(axis, list):
             axis = axis[0]
-        super().__init__(axis=axis, **kwargs)
-    
+        super().__init__(
+            axis=axis,
+            momentum=momentum,
+            epsilon=epsilon,
+            **kwargs
+        )
+
     @classmethod
     def from_config(cls, config):
-        if 'axis' in config and isinstance(config['axis'], list):
-            config['axis'] = config['axis'][0]
-        return cls(**config)
+        # Extract the necessary parameters
+        config_copy = config.copy()
+        if 'axis' in config_copy and isinstance(config_copy['axis'], list):
+            config_copy['axis'] = config_copy['axis'][0]
+        return cls(**config_copy)
 
 @st.cache_resource
 def load_model_with_custom_objects():
     try:
-        # Print current working directory and list files for debugging
-        st.write("Current directory contents:", os.listdir())
-            
+        # Define custom objects
         custom_objects = {
             'BatchNormalization': CustomBatchNormalization,
+            'ResNet50V2': ResNet50V2,
+            'relu': tf.keras.activations.relu,
+            'softmax': tf.keras.activations.softmax
         }
         
+        # Load model with custom objects
         with tf.keras.utils.custom_object_scope(custom_objects):
-            model = load_model('model3.h5', compile=False)
+            model = tf.keras.models.load_model('model3.h5', compile=False)
+            
+            # Recompile the model
             model.compile(
-                optimizer='adam',
+                optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
                 loss='categorical_crossentropy',
                 metrics=['accuracy']
             )
         return model
     except Exception as e:
         st.error(f"Error loading model: {str(e)}")
-        raise e  # Re-raise to see full traceback
+        return None
 
 def preprocess_image(uploaded_file):
     try:
@@ -62,7 +74,7 @@ def main():
         with st.spinner("Loading model..."):
             model = load_model_with_custom_objects()
             if model is None:
-                st.error("Model loading failed.")
+                st.error("Model loading failed. Please check the model file.")
                 return
             else:
                 st.success("Model loaded successfully!")
@@ -70,7 +82,7 @@ def main():
         st.error(f"Error during model loading: {str(e)}")
         return
 
-    # File uploader for images
+    # File uploader
     uploaded_file = st.file_uploader("Choose an X-ray image file", type=["jpg", "jpeg", "png"])
     
     if uploaded_file is not None:
