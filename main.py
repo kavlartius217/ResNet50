@@ -1,43 +1,30 @@
-import h5py
-import json
 import streamlit as st
 import numpy as np
 import tensorflow as tf
+import h5py
+import json
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
 from tensorflow.keras.applications import ResNet50V2
 
-def fix_batch_normalization(layer_config):
-    """Fix BatchNormalization layer configuration"""
-    if layer_config.get('class_name') == 'BatchNormalization':
-        if isinstance(layer_config['config'].get('axis'), list):
-            layer_config['config']['axis'] = layer_config['config']['axis'][0]
-    return layer_config
-
 @st.cache_resource
 def load_model_with_custom_objects():
     try:
-        # First, load the model in a special way to modify BatchNorm layers
-        with h5py.File('model3.h5', 'r') as f:
-            model_config = f.attrs.get('model_config')
-            if model_config is not None:
-                model_config = json.loads(model_config.decode('utf-8'))
-                # Fix BatchNormalization layers in config
-                if 'layers' in model_config:
-                    for layer in model_config['layers']:
-                        layer = fix_batch_normalization(layer)
+        # Set the batch norm layer to accept lists
+        class CustomBatchNormalization(tf.keras.layers.BatchNormalization):
+            def __init__(self, axis=[3], **kwargs):
+                if isinstance(axis, list):
+                    axis = axis[0]
+                super().__init__(axis=axis, **kwargs)
 
         # Define custom objects
         custom_objects = {
+            'BatchNormalization': CustomBatchNormalization,
             'ResNet50V2': ResNet50V2
         }
 
-        # Load model with modified config
-        model = tf.keras.models.load_model(
-            'model3.h5',
-            custom_objects=custom_objects,
-            compile=False
-        )
+        # Load model with the custom objects
+        model = load_model('model3.h5', custom_objects=custom_objects, compile=False)
         
         # Recompile model
         model.compile(
@@ -69,16 +56,7 @@ def main():
     st.title("Lung Disease Classification")
     st.write("Upload an X-ray image to classify the lung condition.")
 
-    # Add import statements display
-    with st.expander("Show required imports"):
-        st.code("""
-import tensorflow as tf
-import h5py
-import json
-from tensorflow.keras.applications import ResNet50V2
-        """)
-
-    # Load model with better error handling
+    # Load model with error handling
     try:
         with st.spinner("Loading model..."):
             model = load_model_with_custom_objects()
